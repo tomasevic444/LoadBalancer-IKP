@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <winsock2.h>
-#include <ws2tcpip.h>  // Required for inet_pton
+#include <ws2tcpip.h>
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -28,6 +28,11 @@ int main() {
         return 1;
     }
 
+    // Set timeouts for sending and receiving
+    int timeout = 5000;  // 5 seconds
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
+
     // Configure the server address
     server_address.sin_family = AF_INET;
     server_address.sin_port = htons(PORT);
@@ -47,30 +52,55 @@ int main() {
     }
 
     // Send multiple messages
-    printf("Connected to server. Type 'exit' to quit.\n");
+    printf("Connected to server.\n");
     while (1) {
-        printf("Enter a message to send: ");
-        fgets(message, BUFFER_SIZE, stdin);
+        printf("-----------------------------------------------------------\nType 'ADD_WORKER' to add another worker to the server.\nType 'exit' to quit.");
+        printf("\nEnter data: ");
+        if (fgets(message, BUFFER_SIZE, stdin) == NULL) {
+            fprintf(stderr, "Error reading input or EOF encountered.\n");
+            continue;
+        }
 
-        // Remove trailing newline character from input
-        message[strcspn(message, "\n")] = 0;
+        message[strcspn(message, "\n")] = '\0';
 
-        // Check for exit command
+        if (strlen(message) == 0) {
+            printf("No input provided. Please try again.\n");
+        }
         if (strcmp(message, "exit") == 0) {
             printf("Exiting...\n");
             break;
         }
 
         // Send the message
-        if (send(sock, message, strlen(message), 0) == SOCKET_ERROR) {
-            printf("Failed to send message. Error Code: %d\n", WSAGetLastError());
-            break;
+        int total_sent = 0;
+        int message_len = strlen(message);
+        while (total_sent < message_len) {
+            int bytes_sent = send(sock, message + total_sent, message_len - total_sent, 0);
+            if (bytes_sent == SOCKET_ERROR) {
+                printf("Failed to send message. Error Code: %d\n", WSAGetLastError());
+                break;
+            }
+            total_sent += bytes_sent;
         }
 
-        printf("Message sent: %s\n", message);
+        // Wait for a response from the server
+        int response_len = recv(sock, message, BUFFER_SIZE, 0);
+        if (response_len > 0) {
+            message[response_len] = '\0';  // Null-terminate the received data
+            printf("%s\n", message);
+        }
+        else if (response_len == 0) {
+            printf("Server disconnected.\n");
+            break;
+        }
+        else {
+            printf("Failed to receive server response. Error Code: %d\n", WSAGetLastError());
+            break;
+        }
     }
 
-    // Clean up
+    // Gracefully close the connection
+    shutdown(sock, SD_BOTH);
     closesocket(sock);
     WSACleanup();
     return 0;

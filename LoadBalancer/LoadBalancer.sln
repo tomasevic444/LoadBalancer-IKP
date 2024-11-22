@@ -7,8 +7,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "LoadBalancer", "LoadBalance
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Client", "Client\Client.vcxproj", "{5B312CE2-7929-4FF7-A0AE-04B94736B3E8}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Worker", "Worker\Worker.vcxproj", "{F36068EA-9F3E-4E01-87EC-94D82656062D}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{7792ED26-53CA-422E-80EA-12FA702B8DC5}"
 	ProjectSection(SolutionItems) = preProject
 		.gitignore = .gitignore
@@ -38,14 +36,6 @@ Global
 		{5B312CE2-7929-4FF7-A0AE-04B94736B3E8}.Release|x64.Build.0 = Release|x64
 		{5B312CE2-7929-4FF7-A0AE-04B94736B3E8}.Release|x86.ActiveCfg = Release|Win32
 		{5B312CE2-7929-4FF7-A0AE-04B94736B3E8}.Release|x86.Build.0 = Release|Win32
-		{F36068EA-9F3E-4E01-87EC-94D82656062D}.Debug|x64.ActiveCfg = Debug|x64
-		{F36068EA-9F3E-4E01-87EC-94D82656062D}.Debug|x64.Build.0 = Debug|x64
-		{F36068EA-9F3E-4E01-87EC-94D82656062D}.Debug|x86.ActiveCfg = Debug|Win32
-		{F36068EA-9F3E-4E01-87EC-94D82656062D}.Debug|x86.Build.0 = Debug|Win32
-		{F36068EA-9F3E-4E01-87EC-94D82656062D}.Release|x64.ActiveCfg = Release|x64
-		{F36068EA-9F3E-4E01-87EC-94D82656062D}.Release|x64.Build.0 = Release|x64
-		{F36068EA-9F3E-4E01-87EC-94D82656062D}.Release|x86.ActiveCfg = Release|Win32
-		{F36068EA-9F3E-4E01-87EC-94D82656062D}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
