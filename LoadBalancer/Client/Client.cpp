@@ -43,6 +43,8 @@ int main() {
         return 1;
     }
 
+    Sleep(3000);
+
     // Connect to the server
     if (connect(sock, (struct sockaddr*)&server_address, sizeof(server_address)) < 0) {
         printf("Connection failed. Error Code: %d\n", WSAGetLastError());

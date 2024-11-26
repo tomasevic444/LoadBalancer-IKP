@@ -1,8 +1,7 @@
 #pragma comment(lib, "ws2_32.lib")
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
-#include "server.h"
-
 #define WIN32_LEAN_AND_MEAN
+
 #include <winsock2.h>
 #include <windows.h>
 #include <stdio.h>
@@ -10,83 +9,122 @@
 #include <string.h>
 
 #define BUFFER_SIZE 1024
-#define ADD_WORKER_CODE "ADD_WORKER"
+#define INITIAL_WORKER_COUNT 5
+#define ADD_WORKER_CMD "add_worker"
 
-// Worker structure definition
+// Worker structure
 typedef struct {
     int worker_id;
-    SOCKET worker_socket; // Worker-to-server communication socket
+    SOCKET task_socket; // For communication with the server
     HANDLE thread_handle;
-    int load; // Load based on the number of bytes processed
+    int port; // Store the worker's port for debugging purposes
 } Worker;
 
 Worker* workers = NULL;
 int worker_count = 0;
 int worker_capacity = 0;
 CRITICAL_SECTION worker_mutex;
-
-#define INITIAL_WORKER_CAPACITY 5
-
-// Worker thread function
 DWORD WINAPI worker_function(LPVOID args) {
     Worker* worker = (Worker*)args;
+    SOCKET listen_socket, connection_socket;
+    struct sockaddr_in worker_address;
     char buffer[BUFFER_SIZE];
     int read_size;
 
-    printf("Worker %d started on socket: %d.\n", worker->worker_id, worker->worker_socket);
+    // Create a listening socket
+    listen_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (listen_socket == INVALID_SOCKET) {
+        printf("Worker %d: Failed to create listening socket. Error: %d\n", worker->worker_id, WSAGetLastError());
+        return 1;
+    }
+
+    worker_address.sin_family = AF_INET;
+    worker_address.sin_addr.s_addr = INADDR_ANY;
+    worker_address.sin_port = 0; // Let the system assign a random port
+
+    if (bind(listen_socket, (struct sockaddr*)&worker_address, sizeof(worker_address)) == SOCKET_ERROR) {
+        printf("Worker %d: Failed to bind listening socket. Error: %d\n", worker->worker_id, WSAGetLastError());
+        closesocket(listen_socket);
+        return 1;
+    }
+
+    if (listen(listen_socket, 1) == SOCKET_ERROR) {
+        printf("Worker %d: Failed to listen on socket. Error: %d\n", worker->worker_id, WSAGetLastError());
+        closesocket(listen_socket);
+        return 1;
+    }
+
+    // Get the assigned port
+    int address_length = sizeof(worker_address);
+    getsockname(listen_socket, (struct sockaddr*)&worker_address, &address_length);
+    int assigned_port = ntohs(worker_address.sin_port);
+    worker->port = assigned_port;
+    printf("Worker %d is listening on port %d.\n", worker->worker_id, assigned_port);
+
+    // Wait for connection from server
+    connection_socket = accept(listen_socket, NULL, NULL);
+    if (connection_socket == INVALID_SOCKET) {
+        printf("Worker %d: Failed to accept connection. Error: %d\n", worker->worker_id,WSAGetLastError());
+        closesocket(listen_socket);
+        return 1;
+    }
+    printf("Worker %d is ready and connected.\n", worker->worker_id);
 
     while (1) {
-        // Use select to check if the socket is readable
-        fd_set read_fds;
-        FD_ZERO(&read_fds);
-        FD_SET(worker->worker_socket, &read_fds);
+        // Receive tasks from the server
+        read_size = recv(connection_socket, buffer, BUFFER_SIZE - 1, 0);
+        if (read_size > 0) {
+            buffer[read_size] = '\0';
+            printf("Worker %d received task: %s\n", worker->worker_id, buffer);
 
-        struct timeval timeout;
-        timeout.tv_sec = 5;  // 5-second timeout
-        timeout.tv_usec = 0;
+            // Process the task
+            printf("Worker %d processing task: %s\n", worker->worker_id, buffer);
 
-        printf("Worker %d waiting for data...\n", worker->worker_id);
-
-        int select_result = select(0, &read_fds, NULL, NULL, &timeout);
-        if (select_result < 0) {
-            printf("Worker %d: select failed. Error Code: %d\n", worker->worker_id, WSAGetLastError());
+            // Send response to the server
+            const char* response = "Task completed by worker.";
+            if (send(connection_socket, response, strlen(response), 0) == SOCKET_ERROR) {
+                printf("Worker %d: Failed to send response. Error: %d\n", worker->worker_id, WSAGetLastError());
+            }
+        }
+        else if (read_size == 0) {
+            printf("Worker %d: Connection closed by server.\n", worker->worker_id);
             break;
         }
-        else if (select_result == 0) {
-            printf("Worker %d: No data received (timeout).\n", worker->worker_id);
-            continue;  // No data, keep waiting
-        }
-
-        if (FD_ISSET(worker->worker_socket, &read_fds)) {
-            read_size = recv(worker->worker_socket, buffer, BUFFER_SIZE - 1, 0);
-
-            if (read_size > 0) {
-                buffer[read_size] = '\0';  // Null-terminate the received data
-                printf("Worker %d received %d bytes: '%s'\n", worker->worker_id, read_size, buffer);
-
-                // Process data
-                printf("Worker %d processing data: %s\n", worker->worker_id, buffer);
-
-                // Send response back to server
-                const char* response = "Task processed.";
-                send(worker->worker_socket, response, strlen(response), 0);
-            }
-            else if (read_size == 0) {
-                printf("Worker %d: Server closed the connection.\n", worker->worker_id);
-                break;
-            }
-            else {
-                printf("Worker %d: recv failed. Error Code: %d\n",
-                    worker->worker_id, WSAGetLastError());
-                break;
-            }
+        else {
+            printf("Worker %d: recv failed. Error: %d\n", worker->worker_id, WSAGetLastError());
+            break;
         }
     }
 
-    // Clean up
-    closesocket(worker->worker_socket);
-    worker->worker_socket = INVALID_SOCKET;
-    printf("Worker %d stopped.\n", worker->worker_id);
+    closesocket(connection_socket);
+    closesocket(listen_socket);
+    printf("Worker %d exiting.\n", worker->worker_id);
+    return 0;
+}
+
+
+
+int connect_to_worker(Worker* worker) {
+    struct sockaddr_in worker_address;
+
+    worker_address.sin_family = AF_INET;
+    worker_address.sin_addr.s_addr = inet_addr("127.0.0.1"); // Assuming localhost for simplicity
+    worker_address.sin_port = htons(worker->port);
+
+    SOCKET worker_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (worker_socket == INVALID_SOCKET) {
+        printf("Failed to create socket for Worker %d. Error: %d\n", worker->worker_id, WSAGetLastError());
+        return 1;
+    }
+
+    if (connect(worker_socket, (struct sockaddr*)&worker_address, sizeof(worker_address)) == SOCKET_ERROR) {
+        printf("Failed to connect to Worker %d on port %d. Error: %d\n", worker->worker_id, worker->port, WSAGetLastError());
+        closesocket(worker_socket);
+        return 1;
+    }
+
+    worker->task_socket = worker_socket;
+    printf("Server connected to Worker %d on port %d.\n", worker->worker_id, worker->port);
     return 0;
 }
 
@@ -95,118 +133,111 @@ int add_worker() {
     EnterCriticalSection(&worker_mutex);
 
     if (worker_count == worker_capacity) {
-        worker_capacity = (worker_capacity == 0) ? INITIAL_WORKER_CAPACITY : worker_capacity * 2;
+        worker_capacity *= 2;
         workers = (Worker*)realloc(workers, worker_capacity * sizeof(Worker));
     }
 
     Worker* new_worker = &workers[worker_count];
     new_worker->worker_id = worker_count + 1;
-    new_worker->load = 0;
 
-    // Server socket for communicating with this worker
+    // Create thread for worker
+    new_worker->thread_handle = CreateThread(NULL, 0, worker_function, (LPVOID)new_worker, 0, NULL);
+    if (new_worker->thread_handle == NULL) {
+        printf("Failed to create thread for Worker %d.\n", new_worker->worker_id);
+        LeaveCriticalSection(&worker_mutex);
+        return 1;
+    }
+
+    // Wait for worker to initialize and retrieve its port (implement a mechanism here)
+    Sleep(500); // Allow time for worker to initialize (better: use a synchronization mechanism)
+
+    // Connect to worker
     SOCKET server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket == INVALID_SOCKET) {
-        printf("Failed to create server socket. Error Code: %d\n", WSAGetLastError());
+        printf("Failed to create server socket for Worker %d. Error: %d\n", new_worker->worker_id, WSAGetLastError());
         LeaveCriticalSection(&worker_mutex);
         return 1;
     }
 
-    struct sockaddr_in server_address;
-    server_address.sin_family = AF_INET;
-    server_address.sin_addr.s_addr = INADDR_ANY;
-    server_address.sin_port = htons(5060 + worker_count); // Unique port for each worker
-
-    if (bind(server_socket, (struct sockaddr*)&server_address, sizeof(server_address)) == SOCKET_ERROR) {
-        printf("Failed to bind server socket for Worker %d. Error Code: %d\n", new_worker->worker_id, WSAGetLastError());
-        closesocket(server_socket);
-        LeaveCriticalSection(&worker_mutex);
-        return 1;
-    }
-
-    if (listen(server_socket, 1) == SOCKET_ERROR) {
-        printf("Listen failed for Worker %d. Error Code: %d\n", new_worker->worker_id, WSAGetLastError());
-        closesocket(server_socket);
-        LeaveCriticalSection(&worker_mutex);
-        return 1;
-    }
-
-    // Create the worker's connecting socket
-    new_worker->worker_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (new_worker->worker_socket == INVALID_SOCKET) {
-        printf("Failed to create worker socket. Error Code: %d\n", WSAGetLastError());
-        closesocket(server_socket);
-        LeaveCriticalSection(&worker_mutex);
+    int worker_port = new_worker->port;
+    if (worker_port == 0) {
+        printf("Failed to retrieve port for Worker %d.\n", new_worker->worker_id);
         return 1;
     }
 
     struct sockaddr_in worker_address;
     worker_address.sin_family = AF_INET;
-    worker_address.sin_addr.s_addr = inet_addr("127.0.0.1");
-    worker_address.sin_port = htons(5060 + worker_count); // Same port as server socket
+    worker_address.sin_addr.s_addr = inet_addr("127.0.0.1"); // Assuming local workers
+    worker_address.sin_port = htons(new_worker->port);
 
-    printf("Worker %d attempting to connect...\n", new_worker->worker_id);
-
-    // Connect worker socket to the server socket
-    if (connect(new_worker->worker_socket, (struct sockaddr*)&worker_address, sizeof(worker_address)) == SOCKET_ERROR) {
-        printf("Worker %d failed to connect. Error Code: %d\n", new_worker->worker_id, WSAGetLastError());
-        closesocket(new_worker->worker_socket);
+    if (connect(server_socket, (struct sockaddr*)&worker_address, sizeof(worker_address)) == SOCKET_ERROR) {
+        printf("Failed to connect to Worker %d on port %d. Error: %d\n",
+            new_worker->worker_id, ntohs(worker_address.sin_port), WSAGetLastError());
         closesocket(server_socket);
         LeaveCriticalSection(&worker_mutex);
         return 1;
     }
 
-    printf("Waiting for Worker %d to connect...\n", new_worker->worker_id);
+    new_worker->task_socket = server_socket;
+    printf("Server connected to Worker %d on port %d.\n", new_worker->worker_id, ntohs(worker_address.sin_port));
 
-    // Accept the connection on the server side
-    SOCKET accepted_socket = accept(server_socket, NULL, NULL);
-    if (accepted_socket == INVALID_SOCKET) {
-        printf("Failed to accept connection for Worker %d. Error Code: %d\n", new_worker->worker_id, WSAGetLastError());
-        closesocket(server_socket);
-        closesocket(new_worker->worker_socket);
-        LeaveCriticalSection(&worker_mutex);
-        return 1;
-    }
-
-    // Use the accepted socket for further communication
-    closesocket(server_socket); // No longer needed
-    new_worker->worker_socket = accepted_socket;
-
-    // Start worker thread
-    new_worker->thread_handle = CreateThread(NULL, 0, worker_function, (LPVOID)new_worker, 0, NULL);
-    if (new_worker->thread_handle == NULL) {
-        printf("Failed to create thread for Worker %d.\n", new_worker->worker_id);
-        closesocket(new_worker->worker_socket);
-        LeaveCriticalSection(&worker_mutex);
-        return 1;
-    }
-
-    printf("Worker %d added successfully.\n", new_worker->worker_id);
     worker_count++;
     LeaveCriticalSection(&worker_mutex);
     return 0;
 }
 
 
-// Function to distribute data to a worker
-void distribute_data_to_worker(const char* data) {
+
+// Initialize a fixed number of workers
+void initialize_workers(int n) {
+    worker_capacity = n;
+    workers = (Worker*)malloc(worker_capacity * sizeof(Worker));
+
+    for (int i = 0; i < n; i++) {
+        add_worker();
+    }
+
+    printf("Initialized %d workers.\n", n);
+}
+
+void distribute_task_to_worker(const char* task, SOCKET client_socket) {
     static int current_worker = 0;
 
     EnterCriticalSection(&worker_mutex);
 
     if (worker_count == 0) {
-        printf("No workers available to handle the data.\n");
+        printf("No workers available to handle the task.\n");
+        const char* response = "ERROR: No workers available.";
+        send(client_socket, response, strlen(response), 0);
     }
     else {
         Worker* worker = &workers[current_worker];
-        printf("Sending data to Worker %d.\n", worker->worker_id);
+        printf("Assigning task to Worker %d.\n", worker->worker_id);
 
-        int bytes_sent = send(worker->worker_socket, data, strlen(data), 0);
+        int bytes_sent = send(worker->task_socket, task, strlen(task), 0);
         if (bytes_sent == SOCKET_ERROR) {
-            printf("Failed to send data to Worker %d. Error Code: %d\n",
-                worker->worker_id, WSAGetLastError());
+            printf("Failed to send task to Worker %d. Error: %d\n", worker->worker_id, WSAGetLastError());
+            const char* response = "ERROR: Failed to assign task.";
+            send(client_socket, response, strlen(response), 0);
         }
         else {
-            printf("Successfully sent %d bytes to Worker %d: %s\n", bytes_sent, worker->worker_id, data);
+            printf("Successfully sent task to Worker %d: %s\n", worker->worker_id, task);
+
+            // Wait for the worker's response
+            char buffer[BUFFER_SIZE];
+            int bytes_received = recv(worker->task_socket, buffer, BUFFER_SIZE - 1, 0);
+            if (bytes_received > 0) {
+                buffer[bytes_received] = '\0';
+                printf("Received response from Worker %d: %s\n", worker->worker_id, buffer);
+
+                // Forward the response to the client
+                send(client_socket, buffer, strlen(buffer), 0);
+            }
+            else {
+                printf("Failed to receive response from Worker %d. Error: %d\n", worker->worker_id, WSAGetLastError());
+                const char* response = "ERROR: Failed to receive worker response.";
+                send(client_socket, response, strlen(response), 0);
+            }
         }
 
         current_worker = (current_worker + 1) % worker_count;
@@ -217,24 +248,27 @@ void distribute_data_to_worker(const char* data) {
 
 
 
-// Server main logic
+// Start the server to accept client connections
 void start_server() {
     WSADATA wsa;
-    SOCKET server_fd, client_fd;
+    SOCKET server_socket, client_socket;
     struct sockaddr_in server_address, client_address;
     int client_address_len = sizeof(client_address);
     char buffer[BUFFER_SIZE];
 
-    // Initialise the worker management system
-    InitializeCriticalSection(&worker_mutex);
-
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-        printf("Failed to initialize Winsock. Error Code: %d\n", WSAGetLastError());
+        printf("Failed to initialize Winsock. Error: %d\n", WSAGetLastError());
         exit(EXIT_FAILURE);
     }
 
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
-        printf("Socket creation failed. Error Code: %d\n", WSAGetLastError());
+    InitializeCriticalSection(&worker_mutex);
+
+    // Initialize the worker pool
+    initialize_workers(INITIAL_WORKER_COUNT);
+
+    server_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_socket == INVALID_SOCKET) {
+        printf("Failed to create server socket. Error: %d\n", WSAGetLastError());
         WSACleanup();
         exit(EXIT_FAILURE);
     }
@@ -243,61 +277,48 @@ void start_server() {
     server_address.sin_addr.s_addr = INADDR_ANY;
     server_address.sin_port = htons(5059);
 
-    if (bind(server_fd, (struct sockaddr*)&server_address, sizeof(server_address)) == SOCKET_ERROR) {
-        printf("Bind failed. Error Code: %d\n", WSAGetLastError());
-        closesocket(server_fd);
+    if (bind(server_socket, (struct sockaddr*)&server_address, sizeof(server_address)) == SOCKET_ERROR) {
+        printf("Failed to bind server socket. Error: %d\n", WSAGetLastError());
+        closesocket(server_socket);
         WSACleanup();
         exit(EXIT_FAILURE);
     }
 
-    if (listen(server_fd, 5) == SOCKET_ERROR) {
-        printf("Listen failed. Error Code: %d\n", WSAGetLastError());
-        closesocket(server_fd);
+    if (listen(server_socket, 5) == SOCKET_ERROR) {
+        printf("Listen failed. Error: %d\n", WSAGetLastError());
+        closesocket(server_socket);
         WSACleanup();
         exit(EXIT_FAILURE);
     }
 
-    printf("Server is listening on port %d...\n", 5059);
+    printf("Server listening on port 5059...\n");
 
-    while ((client_fd = accept(server_fd, (struct sockaddr*)&client_address, &client_address_len)) != INVALID_SOCKET) {
-
-        int bytes_received;
-
-        while ((bytes_received = recv(client_fd, buffer, BUFFER_SIZE, 0)) > 0) {
-
-            buffer[bytes_received] = '\0';
-            printf("Received data: '%s'\n", buffer);
-
-            // Remove newline or any extra whitespace from the received message
-            buffer[strcspn(buffer, "\n")] = '\0';
-
-            // Check for the ADD_WORKER command
-            if (strcmp(buffer, ADD_WORKER_CODE) == 0) {
-                printf("Add Worker command received.\n");
-
-                // Call the function to add a new worker
-                if (add_worker() != 1) {
-                    const char* response = "Worker created.";
-                    send(client_fd, response, strlen(response), 0);
+    while (1) {
+        client_socket = accept(server_socket, (struct sockaddr*)&client_address, &client_address_len);
+        if (client_socket == INVALID_SOCKET) {
+            printf("Failed to accept connection. Error: %d\n", WSAGetLastError());
+            continue;
+        }
+        while (1) {
+            int bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
+            if (bytes_received > 0) {
+                buffer[bytes_received] = '\0';
+                if (strcmp(buffer, ADD_WORKER_CMD) == 0) {
+                    printf("Received add_worker command.\n");
+                    add_worker();
+                    send(client_socket, "ADD_RECEIVED", 12, 0);
                 }
                 else {
-                    const char* response = "Unable to create worker!";
-                    send(client_fd, response, strlen(response), 0);
+                    printf("Received task from client: %s\n", buffer);
+                    distribute_task_to_worker(buffer, client_socket); // Forward the task and pass the client socket
                 }
             }
-            else {
-                printf("Message received: %s\n", buffer);
-                // Send acknowledgment for any other message
-                const char* response = "Data received.";
-                send(client_fd, response, strlen(response), 0);
-
-                distribute_data_to_worker(buffer);  // Send the data to a worker
-            }
         }
-        closesocket(client_fd);
+
+        closesocket(client_socket);
     }
 
+    closesocket(server_socket);
     DeleteCriticalSection(&worker_mutex);
-    closesocket(server_fd);
     WSACleanup();
 }

@@ -1,15 +1,14 @@
 ﻿  server.cpp
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(36,12): warning C4477: 'printf' : format string '%d' requires an argument of type 'int', but variadic argument 2 has type 'SOCKET'
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(36,12):
-      consider using '%lld' in the format string
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(36,12):
-      consider using '%Id' in the format string
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(36,12):
-      consider using '%I64d' in the format string
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(67,16): warning C4473: 'printf' : not enough arguments passed for format string
+      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(67,16):
+      placeholders and their parameters expect 2 variadic arguments, but 1 were provided
+      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(67,16):
+      the missing variadic argument 2 is required by format string '%d'
   
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(72,61): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(203,66): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(281,53): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(285,53): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(292,49): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(85,57): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(211,45): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(217,64): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(221,49): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(234,51): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(239,53): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
   LoadBalancer.vcxproj -> C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\x64\Debug\LoadBalancer.exe
