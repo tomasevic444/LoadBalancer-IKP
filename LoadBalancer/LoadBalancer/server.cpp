@@ -10,7 +10,7 @@
 
 #define BUFFER_SIZE 1024
 #define INITIAL_WORKER_COUNT 5
-#define ADD_WORKER_CMD "add_worker"
+#define ADD_WORKER_CMD "ADD_WORKER"
 
 // Worker structure
 typedef struct {
@@ -24,6 +24,8 @@ Worker* workers = NULL;
 int worker_count = 0;
 int worker_capacity = 0;
 CRITICAL_SECTION worker_mutex;
+
+
 DWORD WINAPI worker_function(LPVOID args) {
     Worker* worker = (Worker*)args;
     SOCKET listen_socket, connection_socket;
@@ -79,6 +81,11 @@ DWORD WINAPI worker_function(LPVOID args) {
 
             // Process the task
             printf("Worker %d processing task: %s\n", worker->worker_id, buffer);
+            /*------------------------------------------------------------------------*/
+            //                      TODO 
+            // - IF COMMAND = STORE: STORE DATA AND SEND DATA BACK FOR SYNC
+            // - IF COMMAND = GET: GET ALL DATA AND SEND DATA BACK FOR SYNC
+            /*------------------------------------------------------------------------*/
 
             // Send response to the server
             const char* response = "Task completed by worker.";
@@ -101,8 +108,6 @@ DWORD WINAPI worker_function(LPVOID args) {
     printf("Worker %d exiting.\n", worker->worker_id);
     return 0;
 }
-
-
 
 int connect_to_worker(Worker* worker) {
     struct sockaddr_in worker_address;
@@ -265,6 +270,8 @@ void start_server() {
 
     // Initialize the worker pool
     initialize_workers(INITIAL_WORKER_COUNT);
+
+   
 
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket == INVALID_SOCKET) {
