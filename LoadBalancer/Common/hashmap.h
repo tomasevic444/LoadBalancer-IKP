@@ -22,6 +22,11 @@ typedef struct HashMap {
     HashMapEntry* table[HASH_MAP_SIZE]; // Array of hash map entries
 } HashMap;
 
+typedef struct KeyValuePair {
+    char* key;
+    void* value;
+} KeyValuePair;
+
 // Function declarations
 unsigned int hash(const char* key);
 HashMap* create_hash_map();
@@ -30,5 +35,7 @@ int insert(HashMap* map, const char* key, void* value);
 void* get(HashMap* map, const char* key);
 int remove_key(HashMap* map, const char* key);
 void print_hash_map(HashMap* map);
+
+KeyValuePair* get_all_keys_values(HashMap* map, int* count);
 
 #endif // HASHMAP_H

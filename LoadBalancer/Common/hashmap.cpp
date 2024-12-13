@@ -139,3 +139,42 @@ void print_hash_map(HashMap* map) {
         }
     }
 }
+
+// Retrieve all key-value pairs from the hash map
+KeyValuePair* get_all_keys_values(HashMap* map, int* count) {
+    if (!map) {
+        *count = 0;
+        return NULL;
+    }
+
+    // Count the total number of key-value pairs in the hash map
+    *count = 0;
+    for (int i = 0; i < HASH_MAP_SIZE; i++) {
+        HashMapEntry* entry = map->table[i];
+        while (entry) {
+            (*count)++;
+            entry = entry->next;
+        }
+    }
+
+    // Allocate memory for the result array
+    KeyValuePair* result = (KeyValuePair*)malloc(sizeof(KeyValuePair) * (*count));
+    if (!result) {
+        *count = 0;
+        return NULL;
+    }
+
+    // Populate the result array with key-value pairs
+    int index = 0;
+    for (int i = 0; i < HASH_MAP_SIZE; i++) {
+        HashMapEntry* entry = map->table[i];
+        while (entry) {
+            result[index].key = entry->key;
+            result[index].value = entry->value;
+            index++;
+            entry = entry->next;
+        }
+    }
+
+    return result;
+}

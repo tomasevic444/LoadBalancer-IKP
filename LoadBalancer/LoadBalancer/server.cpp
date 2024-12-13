@@ -12,6 +12,7 @@
 
 #define BUFFER_SIZE 1024
 #define INITIAL_WORKER_COUNT 5
+#define MAX_WORKER_COUNT 10
 #define ADD_WORKER_CMD "ADD_WORKER"
 
 // Worker structure
@@ -110,19 +111,27 @@ DWORD WINAPI worker_response_handler(LPVOID args) {
     while (1) {
         FD_ZERO(&readfds);
 
-        // Add worker sockets to the fd_set
+        printf("ENTERING the thread response mutex\n");
         EnterCriticalSection(&worker_mutex);
+        printf("IN the thread response mutex\n");
         int max_sd = 0;
-        for (int i = 0; i < worker_count; i++) {
-            Worker* worker = &workers[i];
-            if (worker->task_socket != INVALID_SOCKET) {
-                FD_SET(worker->task_socket, &readfds);
-                if (worker->task_socket > max_sd) {
-                    max_sd = worker->task_socket;
+        __try {
+            // Add worker sockets to the fd_set
+            for (int i = 0; i < worker_count; i++) {
+                Worker* worker = &workers[i];
+                if (worker->task_socket != INVALID_SOCKET) {
+                    FD_SET(worker->task_socket, &readfds);
+                    if (worker->task_socket > max_sd) {
+                        max_sd = worker->task_socket;
+                    }
                 }
             }
         }
-        LeaveCriticalSection(&worker_mutex);
+        __finally {
+            printf("LEAVING the thread response mutex\n");
+            LeaveCriticalSection(&worker_mutex);
+            printf("LEFT the thread response mutex\n");
+        }
 
         // Set timeout for select
         timeout.tv_sec = 1;  // 1-second timeout
@@ -131,49 +140,63 @@ DWORD WINAPI worker_response_handler(LPVOID args) {
         // Monitor the sockets for readability
         activity = select(max_sd + 1, &readfds, NULL, NULL, &timeout);
 
-        if (activity < 0 && WSAGetLastError() != WSAEINTR) {
-            printf("Select failed. Error: %d\n", WSAGetLastError());
-            break;
-        }
-
         if (activity > 0) {
+            printf("ENTERING the thread response mutex\n");
             EnterCriticalSection(&worker_mutex);
-            for (int i = 0; i < worker_count; i++) {
-                Worker* worker = &workers[i];
+            printf("IN the thread response mutex\n");
+            __try {
+                for (int i = 0; i < worker_count; i++) {
+                    Worker* worker = &workers[i];
+                    if (worker->task_socket != INVALID_SOCKET && FD_ISSET(worker->task_socket, &readfds)) {
+                        // Use a non-blocking approach with recv
+                        u_long mode = 1; // Set non-blocking mode
+                        ioctlsocket(worker->task_socket, FIONBIO, &mode);
 
-                if (worker->task_socket != INVALID_SOCKET && FD_ISSET(worker->task_socket, &readfds)) {
-                    int bytes_received = recv(worker->task_socket, buffer, BUFFER_SIZE - 1, 0);
+                        printf("FD IS SET, attempting to recv\n");
+                        int bytes_received = recv(worker->task_socket, buffer, BUFFER_SIZE - 1, 0);
 
-                    if (bytes_received > 0) {
-                        buffer[bytes_received] = '\0';
-                        printf("Worker %d responded: %s\n", worker->worker_id, buffer);
+                        if (bytes_received > 0) {
+                            buffer[bytes_received] = '\0';
+                            printf("Worker %d responded: %s\n", worker->worker_id, buffer);
 
-                        //start the sync procedure 
-                        sync_active = 1;
-                        // Process the response here or signal the main server
-                        for (int j = 0; j < worker_count; j++) {
-                            if (i != j) workers[i].synced = 0;
+                            // Start the sync procedure
+                            sync_active = 1;
+                            for (int j = 0; j < worker_count; j++) {
+                                if (i != j) workers[j].synced = 0;
+                            }
+
+                            // Broadcast data to all workers except the sending one
+                            for (int j = 0; j < worker_count; j++) {
+                                if (i != j) {
+                                    if (send(workers[j].task_socket, buffer, bytes_received, 0) == SOCKET_ERROR) {
+                                        printf("Failed to sync Worker %d. Error: %d\n", workers[j].worker_id, WSAGetLastError());
+                                    }
+                                }
+                            }
+                            sync_active = 0;
+
                         }
-                        //send the data received to all workers
-                        ///TODO
-                        for (int j = 0; j < worker_count; j++) {
-                            if (i != j) send(workers[i].task_socket, buffer, bytes_received, 0);
+                        else if (bytes_received == 0) {
+                            printf("Worker %d disconnected.\n", worker->worker_id);
+                            closesocket(worker->task_socket);
+                            worker->task_socket = INVALID_SOCKET;
                         }
-                        // resume normal work
-                        sync_active = 0;
+                        else if (WSAGetLastError() != WSAEWOULDBLOCK) {
+                            // Ignore non-blocking errors
+                            printf("Worker %d: recv failed. Error: %d\n", worker->worker_id, WSAGetLastError());
+                        }
 
-                    }
-                    else if (bytes_received == 0) {
-                        printf("Worker %d disconnected.\n", worker->worker_id);
-                        closesocket(worker->task_socket);
-                        worker->task_socket = INVALID_SOCKET;
-                    }
-                    else {
-                        printf("Worker %d: recv failed. Error: %d\n", worker->worker_id, WSAGetLastError());
+                        // Reset the socket to blocking mode
+                        mode = 0;
+                        ioctlsocket(worker->task_socket, FIONBIO, &mode);
                     }
                 }
             }
-            LeaveCriticalSection(&worker_mutex);
+            __finally {
+                printf("LEAVING the thread response mutex\n");
+                LeaveCriticalSection(&worker_mutex);
+                printf("LEFT the thread response mutex\n");
+            }
         }
 
         // Sleep to reduce CPU usage
@@ -182,6 +205,8 @@ DWORD WINAPI worker_response_handler(LPVOID args) {
 
     return 0;
 }
+
+
 
 // Main function that workers execute, it stores or loads data from and to the worker node
 DWORD WINAPI worker_function(LPVOID args) {
@@ -197,6 +222,7 @@ DWORD WINAPI worker_function(LPVOID args) {
         printf("Worker %d: Failed to create listening socket. Error: %d\n", worker->worker_id, WSAGetLastError());
         return 1;
     }
+    printf("Worker %d: Created listening socket (fd: %d)\n", worker->worker_id, listen_socket);
 
     worker_address.sin_family = AF_INET;
     worker_address.sin_addr.s_addr = INADDR_ANY;
@@ -207,120 +233,95 @@ DWORD WINAPI worker_function(LPVOID args) {
         closesocket(listen_socket);
         return 1;
     }
+    printf("Worker %d: Bound to port (auto assigned)\n", worker->worker_id);
 
     if (listen(listen_socket, 1) == SOCKET_ERROR) {
         printf("Worker %d: Failed to listen on socket. Error: %d\n", worker->worker_id, WSAGetLastError());
         closesocket(listen_socket);
         return 1;
     }
+    printf("Worker %d: Listening on socket %d...\n", worker->worker_id, listen_socket);
 
     // Get the assigned port
     int address_length = sizeof(worker_address);
     getsockname(listen_socket, (struct sockaddr*)&worker_address, &address_length);
     int assigned_port = ntohs(worker_address.sin_port);
     worker->port = assigned_port;
-    printf("Worker %d is listening on port %d.\n", worker->worker_id, assigned_port);
+    printf("Worker %d: Assigned to port %d\n", worker->worker_id, assigned_port);
 
     // Wait for connection from server
     connection_socket = accept(listen_socket, NULL, NULL);
     if (connection_socket == INVALID_SOCKET) {
-        printf("Worker %d: Failed to accept connection. Error: %d\n", worker->worker_id,WSAGetLastError());
+        printf("Worker %d: Failed to accept connection. Error: %d\n", worker->worker_id, WSAGetLastError());
         closesocket(listen_socket);
         return 1;
     }
-    printf("Worker %d is ready and connected.\n", worker->worker_id);
+    printf("Worker %d: Accepted connection (fd: %d)\n", worker->worker_id, connection_socket);
 
     while (1) {
 
-        if (sync_active == 1 && worker->synced == 0) {
-            // Receive tasks from the server
-            read_size = recv(connection_socket, buffer, BUFFER_SIZE - 1, 0);
-            buffer[read_size] = '\0';
-
-            // Extract key and value
-            char key[BUFFER_SIZE], value[BUFFER_SIZE];
-            sscanf_s(buffer + 6, "%s", value, _countof(value));
-
-            // Generate a key based on the value
-            unsigned long key_hash = hash_function(value);
-            sprintf_s(key, "%lu", key_hash); // Convert hash to string
-
-            // Store in the worker's hash map
-            if (insert(worker->data_store, key, _strdup(value)) == 0) {
-                printf("Worker %d stored data: %s -> %s\n", worker->worker_id, key, value);
-                print_hash_map(worker->data_store);
-                const char* response = buffer;
-                send(connection_socket, response, read_size, 0);
-            }
-            else {
-                printf("Worker %d failed to store data: %s -> %s\n", worker->worker_id, key, value);
-                const char* response = buffer;
-                send(connection_socket, response, read_size, 0);
-            }
-            worker->synced = 1;
-        }
-
         // Receive tasks from the server
         read_size = recv(connection_socket, buffer, BUFFER_SIZE - 1, 0);
+        printf("Worker %d: Received %d bytes\n", worker->worker_id, read_size);
+
         if (read_size > 0) {
-            buffer[read_size] = '\0';
-            printf("Worker %d received task: %s\n", worker->worker_id, buffer);
+            buffer[read_size] = '\0';  // Null-terminate the received data
+            printf("Worker %d: Received data: %s\n", worker->worker_id, buffer);
 
-            // Process the task
-            printf("Worker %d processing task: %s\n", worker->worker_id, buffer);
-
-            /*============THE FUN PART==============*/
-
-
-            /*
-                Format: STORE: <value>
-                Key generation: generates a hash for the key based on the value
-                Sends: <value> contained in key-ed location
-            */
             if (strncmp(buffer, "STORE:", 6) == 0) {
                 // Extract key and value
                 char key[BUFFER_SIZE], value[BUFFER_SIZE];
-                sscanf_s(buffer + 6, "%s", value,_countof(value));
-
-                // Generate a key based on the value
+                sscanf_s(buffer + 6, "%s", value, _countof(value));
                 unsigned long key_hash = hash_function(value);
                 sprintf_s(key, "%lu", key_hash); // Convert hash to string
 
-                // Store in the worker's hash map
                 if (insert(worker->data_store, key, _strdup(value)) == 0) {
                     printf("Worker %d stored data: %s -> %s\n", worker->worker_id, key, value);
-                    print_hash_map(worker->data_store);
-                    const char* response = buffer;
-                    send(connection_socket, response, read_size, 0);
                 }
                 else {
                     printf("Worker %d failed to store data: %s -> %s\n", worker->worker_id, key, value);
-                    const char* response = buffer;
-                    send(connection_socket, response, read_size, 0);
                 }
-            }
-            /*
-                Format: GET: <key_value>
-                Sends: <value> contained in key-ed location
-            */
-            else if (strncmp(buffer, "GET:", 4) == 0) {
-                // Extract key
-                char key[BUFFER_SIZE];
-                sscanf_s(buffer + 4, "%s", key,_countof(key));
 
-                // Retrieve from the worker's hash map
-                char* value = (char*)get(worker->data_store, key);
-                if (value) {
-                    printf("Worker %d retrieved data: %s -> %s\n", worker->worker_id, key, value);
-                    send(connection_socket, value, strlen(value), 0);
+                if (worker->synced == 1) {
+                    const char* response = buffer;
+                    int bytes_sent = send(connection_socket, response, read_size, 0);
+                    printf("Worker %d: Sent %d bytes back: %s\n", worker->worker_id, bytes_sent, response);
                 }
                 else {
-                    printf("Worker %d could not find key: %s\n", worker->worker_id, key);
-                    const char* response = "GET:NOT_FOUND";
-                    send(connection_socket, response, strlen(response), 0);
+                    worker->synced = 1;
+                    printf("Worker %d is now synced.\n", worker->worker_id);
                 }
             }
-            Sleep(500);
+            else if (strncmp(buffer, "GET_ALL:", 7) == 0) {
+                // Retrieve from the worker's hash map
+                int count = 0;
+                KeyValuePair* all_values = get_all_keys_values(worker->data_store, &count);
+
+                if (all_values) {
+                    char response_buffer[BUFFER_SIZE];
+                    int response_len = 0;
+
+                    // Format all key-value pairs as "key:value" and separate them by newlines
+                    for (int i = 0; i < count; i++) {
+                        int bytes_written = snprintf(response_buffer + response_len,
+                            sizeof(response_buffer) - response_len,
+                            "%s:%s\n", all_values[i].key, (char*)all_values[i].value);
+                        if (bytes_written < 0 || response_len + bytes_written >= sizeof(response_buffer)) {
+                            printf("Buffer overflow or formatting error.\n");
+                            break;
+                        }
+                        response_len += bytes_written;
+                    }
+
+                    int bytes_sent = send(connection_socket, response_buffer, response_len, 0);
+                    printf("Worker %d: Sent GET_ALL response, %d bytes.\n", worker->worker_id, bytes_sent);
+
+                    free(all_values);  // Clean up memory if needed
+                }
+                else {
+                    printf("Worker %d: No key-value pairs found.\n", worker->worker_id);
+                }
+            }
         }
         else if (read_size == 0) {
             printf("Worker %d: Connection closed by server.\n", worker->worker_id);
@@ -369,25 +370,29 @@ int connect_to_worker(Worker* worker) {
 int add_worker() {
     EnterCriticalSection(&worker_mutex);
 
-    if (worker_count == worker_capacity) {
-        worker_capacity *= 2;
-        workers = (Worker*)realloc(workers, worker_capacity * sizeof(Worker));
+    // Check and expand capacity if needed
+    if (worker_count == MAX_WORKER_COUNT) {
+        return 1;
     }
 
+    // Initialize the new worker in the array
     Worker* new_worker = &workers[worker_count];
+    memset(new_worker, 0, sizeof(Worker));
     new_worker->worker_id = worker_count + 1;
     new_worker->load = 0;
+    new_worker->task_socket = INVALID_SOCKET;
 
     // Create thread for worker
     new_worker->thread_handle = CreateThread(NULL, 0, worker_function, (LPVOID)new_worker, 0, NULL);
     if (new_worker->thread_handle == NULL) {
         printf("Failed to create thread for Worker %d.\n", new_worker->worker_id);
+        free(new_worker);
         LeaveCriticalSection(&worker_mutex);
         return 1;
     }
 
-    // Wait for worker to initialize and retrieve its port (implement a mechanism here)
-    Sleep(500); // Allow time for worker to initialize (better: use a synchronization mechanism)
+    // Wait for worker to initialize and retrieve its port
+    Sleep(100);
 
     // Connect to worker
     SOCKET server_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -407,23 +412,21 @@ int add_worker() {
     struct sockaddr_in worker_address;
     worker_address.sin_family = AF_INET;
     worker_address.sin_addr.s_addr = inet_addr("127.0.0.1");
-    worker_address.sin_port = htons(new_worker->port);
+    worker_address.sin_port = htons(worker_port);
 
     if (connect(server_socket, (struct sockaddr*)&worker_address, sizeof(worker_address)) == SOCKET_ERROR) {
-        printf("Failed to connect to Worker %d on port %d. Error: %d\n",
-            new_worker->worker_id, ntohs(worker_address.sin_port), WSAGetLastError());
+        printf("Failed to connect to Worker %d on port %d. Error: %d\n", new_worker->worker_id, worker_port, WSAGetLastError());
         closesocket(server_socket);
         LeaveCriticalSection(&worker_mutex);
         return 1;
     }
 
     new_worker->task_socket = server_socket;
-    printf("Server connected to Worker %d on port %d.\n", new_worker->worker_id, ntohs(worker_address.sin_port));
+    printf("Server connected to Worker %d on port %d.\n", new_worker->worker_id, worker_port);
 
-    // initializing hashmap for individual worker
     new_worker->data_store = create_hash_map();
     if (!new_worker->data_store) {
-        printf("Failed to initialise hashmap for Worker %d.\n", new_worker->worker_id);
+        printf("Failed to initialize hashmap for Worker %d.\n", new_worker->worker_id);
         LeaveCriticalSection(&worker_mutex);
         return 1;
     }
@@ -435,22 +438,148 @@ int add_worker() {
     return 0;
 }
 
+void sync_new_worker() {
+    EnterCriticalSection(&worker_mutex);
+
+    Worker* new_worker = &workers[worker_count - 1];
+    Worker* existing_worker = &workers[0];  // Assuming the first worker to be the source
+
+    printf("Syncing new worker %d with existing worker %d...\n", new_worker->worker_id, existing_worker->worker_id);
+
+    // Send GET_ALL request to the existing worker
+    const char* get_all_request = "GET_ALL";
+    printf("Sending GET_ALL request to Worker %d...\n", existing_worker->worker_id);
+    if (send(existing_worker->task_socket, get_all_request, strlen(get_all_request), 0) == SOCKET_ERROR) {
+        printf("Failed to send GET_ALL request to Worker %d. Error: %d\n", existing_worker->worker_id, WSAGetLastError());
+        LeaveCriticalSection(&worker_mutex);
+        return;
+    }
+    printf("GET_ALL request sent to Worker %d.\n", existing_worker->worker_id);
+
+    // Prepare fd_set for select call
+    fd_set readfds;
+    struct timeval timeout;
+    int activity;
+
+    FD_ZERO(&readfds);
+    FD_SET(existing_worker->task_socket, &readfds);
+
+    timeout.tv_sec = 5;  // Set timeout to 5 seconds
+    timeout.tv_usec = 0;
+
+    // Wait for response using select
+    printf("Waiting for response from Worker %d...\n", existing_worker->worker_id);
+    activity = select(existing_worker->task_socket + 1, &readfds, NULL, NULL, &timeout);
+
+    // Check result of select
+    if (activity < 0) {
+        printf("Select failed. Error: %d\n", WSAGetLastError());
+        LeaveCriticalSection(&worker_mutex);
+        return;
+    }
+
+    if (activity == 0) {
+        printf("Timeout waiting for data from Worker %d.\n", existing_worker->worker_id);
+        LeaveCriticalSection(&worker_mutex);
+        return;
+    }
+
+    // If the socket is ready to read, receive the data
+    if (FD_ISSET(existing_worker->task_socket, &readfds)) {
+        char buffer[BUFFER_SIZE];
+        int bytes_received = recv(existing_worker->task_socket, buffer, sizeof(buffer), 0);
+        if (bytes_received <= 0) {
+            printf("Failed to receive data from Worker %d. Error: %d\n", existing_worker->worker_id, WSAGetLastError());
+            LeaveCriticalSection(&worker_mutex);
+            return;
+        }
+
+        buffer[bytes_received] = '\0';  // Null-terminate the received data
+        printf("Received data from Worker %d: %s\n", existing_worker->worker_id, buffer);
+
+        char* context = NULL;
+        char* line = strtok_s(buffer, "\n", &context);
+        while (line != NULL) {
+
+            // Skip empty lines or lines with only whitespace
+            if (strlen(line) == 0 || strspn(line, " \t") == strlen(line)) {
+                line = strtok_s(NULL, "\n", &context);
+                continue;
+            }
+            char key[BUFFER_SIZE] = { 0 };
+            char value[BUFFER_SIZE] = { 0 };
+
+            // Find the colon in the line
+            char* colon_pos = strchr(line, ':');
+            if (colon_pos != NULL) {
+                // Calculate length of key and value (exclude the colon)
+                size_t key_len = colon_pos - line; // Length of key
+                size_t value_len = strlen(line) - key_len - 1; // Length of value
+
+                // Copy the key (ensure not to overflow)
+                strncpy_s(key, sizeof(key), line, key_len);
+
+                // Copy the value (ensure not to overflow)
+                strncpy_s(value, sizeof(value), colon_pos + 1, value_len);
+
+                // Trim leading/trailing spaces if necessary
+                // Trim the key
+                char* key_end = key + strlen(key) - 1;
+                while (key_end >= key && isspace(*key_end)) {
+                    *key_end = '\0';
+                    key_end--;
+                }
+
+                // Trim the value
+                char* value_end = value + strlen(value) - 1;
+                while (value_end >= value && isspace(*value_end)) {
+                    *value_end = '\0';
+                    value_end--;
+                }
+
+                // Insert the key-value pair into the new worker's hash map
+                if (insert(new_worker->data_store, key, _strdup(value)) == 0) {
+                    printf("New worker %d synchronized key-value pair: %s -> %s\n", new_worker->worker_id, key, value);
+                }
+                else {
+                    printf("Failed to insert key-value pair for new worker %d: %s -> %s\n", new_worker->worker_id, key, value);
+                }
+            }
+            else {
+                printf("Failed to parse key-value pair from line: %s\n", line);
+            }
+
+            line = strtok_s(NULL, "\n", &context);
+        }
+
+    }
+    else {
+        printf("No data received from Worker %d within the timeout period.\n", existing_worker->worker_id);
+    }
+
+    new_worker->synced = 1;
+    printf("New worker %d is fully synchronized with existing data from Worker %d.\n", new_worker->worker_id, existing_worker->worker_id);
+    LeaveCriticalSection(&worker_mutex);
+    printf("exited the critical section from sync\n");
+}
+
 // Initialize initial workers
 void initialize_workers(int n) {
-    worker_capacity = n;
-    workers = (Worker*)malloc(worker_capacity * sizeof(Worker));
 
+    worker_capacity = n;
+    workers = (Worker*)malloc(MAX_WORKER_COUNT * sizeof(Worker)); //allocate memory for all the possible workers
     for (int i = 0; i < n; i++) {
         add_worker();
     }
-
     printf("Initialized %d workers.\n", n);
 }
 
 void distribute_task_to_worker(const char* task, SOCKET client_socket) {
     static int current_worker = 0;
 
+    printf("entering the distribution mutex\n");
     EnterCriticalSection(&worker_mutex);
+    printf("ENTERED THE DISTRIBUTION MUTEX\n");
 
     if (worker_count == 0) {
         printf("No workers available to handle the task.\n");
@@ -503,8 +632,9 @@ void distribute_task_to_worker(const char* task, SOCKET client_socket) {
             send(client_socket, response, strlen(response), 0);
         }
     }
-
+    printf("Leaving the distribution mutex\n");
     LeaveCriticalSection(&worker_mutex);
+    printf("left the distribution mutex\n");
 }
 
 // Start the server to accept client connections
@@ -569,8 +699,14 @@ void start_server() {
                 buffer[bytes_received] = '\0';
                 if (strcmp(buffer, ADD_WORKER_CMD) == 0) {
                     printf("Received add_worker command.\n");
-                    add_worker();
-                    send(client_socket, "ADD_RECEIVED", 12, 0);
+                    int result = add_worker();
+                    if (result) {
+                        send(client_socket, "Max workers reached.", 20, 0);
+                    }
+                    printf("syncing new worker with existing data\n");
+                    sync_new_worker();
+
+                    send(client_socket, "ADD_SUCCESS", 11, 0);
                 }
                 else {
                     printf("Received task from client: %s\n", buffer);
