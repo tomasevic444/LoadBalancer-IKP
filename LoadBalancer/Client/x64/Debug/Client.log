@@ -1,3 +1,1 @@
-﻿  client.cpp
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\Client\client.cpp(78,25): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-  Client.vcxproj -> C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\x64\Debug\Client.exe
+﻿  Client.vcxproj -> C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\x64\Debug\Client.exe

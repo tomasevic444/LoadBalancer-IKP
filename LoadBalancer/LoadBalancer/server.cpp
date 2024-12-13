@@ -7,24 +7,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "hashmap.h"
-#include "hashmap.cpp"
-
-#define BUFFER_SIZE 1024
-#define INITIAL_WORKER_COUNT 5
-#define MAX_WORKER_COUNT 10
-#define ADD_WORKER_CMD "ADD_WORKER"
-
-// Worker structure
-typedef struct {
-    int worker_id;
-    SOCKET task_socket; // For communication with the server
-    HANDLE thread_handle; // handle for running the worker function
-    int port;
-    int load;
-    HashMap* data_store;
-    int synced;
-} Worker;
+#include "server.h"
+#include "constants.h"
+#include "queue.h"
 
 Worker* workers = NULL;
 int worker_count = 0;
@@ -32,62 +17,13 @@ int worker_capacity = 0;
 
 // Critical section mutex-es for syncronizing tasks
 CRITICAL_SECTION worker_mutex;
-CRITICAL_SECTION worker_queue_mutex;
-
-typedef struct {
-    int worker_id;
-    char task[BUFFER_SIZE];
-} TaskInfo;
-
-typedef struct TaskNode {
-    TaskInfo task_info;
-    struct TaskNode* next;
-} TaskNode;
-
-TaskNode* task_queue_head = NULL;
-TaskNode* task_queue_tail = NULL;
 CRITICAL_SECTION task_queue_mutex;
 
+// useful for debugging
 int sync_active = 0;
 
 //handle for the response thread function
 HANDLE response_thread;
-
-// Adding and removing tasks to queue (for now unused but will probably be important later)
-void enqueue_task(TaskInfo task_info) {
-    EnterCriticalSection(&task_queue_mutex);
-
-    TaskNode* new_node = (TaskNode*)malloc(sizeof(TaskNode));
-    new_node->task_info = task_info;
-    new_node->next = NULL;
-
-    if (task_queue_tail) {
-        task_queue_tail->next = new_node;
-    }
-    else {
-        task_queue_head = new_node;
-    }
-    task_queue_tail = new_node;
-
-    LeaveCriticalSection(&task_queue_mutex);
-}
-TaskInfo dequeue_task() {
-    EnterCriticalSection(&task_queue_mutex);
-
-    TaskInfo task_info = { 0 };
-    if (task_queue_head) {
-        TaskNode* temp = task_queue_head;
-        task_info = temp->task_info;
-        task_queue_head = task_queue_head->next;
-        if (!task_queue_head) {
-            task_queue_tail = NULL;
-        }
-        free(temp);
-    }
-
-    LeaveCriticalSection(&task_queue_mutex);
-    return task_info;
-}
 
 // Compute hash for given string value (for key -> value pairing)
 unsigned long hash_function(const char* str) {
@@ -205,8 +141,6 @@ DWORD WINAPI worker_response_handler(LPVOID args) {
 
     return 0;
 }
-
-
 
 // Main function that workers execute, it stores or loads data from and to the worker node
 DWORD WINAPI worker_function(LPVOID args) {

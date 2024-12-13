@@ -1,0 +1,6 @@
+#pragma once
+
+#define BUFFER_SIZE 1024
+#define INITIAL_WORKER_COUNT 5
+#define MAX_WORKER_COUNT 10
+#define ADD_WORKER_CMD "ADD_WORKER"
