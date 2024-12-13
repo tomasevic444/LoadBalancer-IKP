@@ -19,6 +19,8 @@ int worker_capacity = 0;
 CRITICAL_SECTION worker_mutex;
 CRITICAL_SECTION task_queue_mutex;
 
+CRITICAL_SECTION terminal_mutex;
+
 // useful for debugging
 int sync_active = 0;
 
@@ -47,9 +49,9 @@ DWORD WINAPI worker_response_handler(LPVOID args) {
     while (1) {
         FD_ZERO(&readfds);
 
-        printf("ENTERING the thread response mutex\n");
+        //printf("ENTERING the thread response mutex\n");
         EnterCriticalSection(&worker_mutex);
-        printf("IN the thread response mutex\n");
+        //printf("IN the thread response mutex\n");
         int max_sd = 0;
         __try {
             // Add worker sockets to the fd_set
@@ -64,9 +66,9 @@ DWORD WINAPI worker_response_handler(LPVOID args) {
             }
         }
         __finally {
-            printf("LEAVING the thread response mutex\n");
+            //printf("LEAVING the thread response mutex\n");
             LeaveCriticalSection(&worker_mutex);
-            printf("LEFT the thread response mutex\n");
+            //printf("LEFT the thread response mutex\n");
         }
 
         // Set timeout for select
@@ -77,9 +79,9 @@ DWORD WINAPI worker_response_handler(LPVOID args) {
         activity = select(max_sd + 1, &readfds, NULL, NULL, &timeout);
 
         if (activity > 0) {
-            printf("ENTERING the thread response mutex\n");
+            //printf("ENTERING the thread response mutex\n");
             EnterCriticalSection(&worker_mutex);
-            printf("IN the thread response mutex\n");
+            //("IN the thread response mutex\n");
             __try {
                 for (int i = 0; i < worker_count; i++) {
                     Worker* worker = &workers[i];
@@ -129,9 +131,9 @@ DWORD WINAPI worker_response_handler(LPVOID args) {
                 }
             }
             __finally {
-                printf("LEAVING the thread response mutex\n");
+                //printf("LEAVING the thread response mutex\n");
                 LeaveCriticalSection(&worker_mutex);
-                printf("LEFT the thread response mutex\n");
+                //printf("LEFT the thread response mutex\n");
             }
         }
 
@@ -196,11 +198,11 @@ DWORD WINAPI worker_function(LPVOID args) {
 
         // Receive tasks from the server
         read_size = recv(connection_socket, buffer, BUFFER_SIZE - 1, 0);
-        printf("Worker %d: Received %d bytes\n", worker->worker_id, read_size);
+        //printf("Worker %d: Received %d bytes\n", worker->worker_id, read_size);
 
         if (read_size > 0) {
             buffer[read_size] = '\0';  // Null-terminate the received data
-            printf("Worker %d: Received data: %s\n", worker->worker_id, buffer);
+            //printf("Worker %d: Received data: %s\n", worker->worker_id, buffer);
 
             if (strncmp(buffer, "STORE:", 6) == 0) {
                 // Extract key and value
@@ -210,7 +212,10 @@ DWORD WINAPI worker_function(LPVOID args) {
                 sprintf_s(key, "%lu", key_hash); // Convert hash to string
 
                 if (insert(worker->data_store, key, _strdup(value)) == 0) {
+                    EnterCriticalSection(&terminal_mutex);
                     printf("Worker %d stored data: %s -> %s\n", worker->worker_id, key, value);
+                    print_hash_map(worker->data_store);
+                    LeaveCriticalSection(&terminal_mutex);
                 }
                 else {
                     printf("Worker %d failed to store data: %s -> %s\n", worker->worker_id, key, value);
@@ -372,6 +377,11 @@ int add_worker() {
     return 0;
 }
 
+// Sync the new worker by fetching data from any synced worker and populating the hashmap
+
+/// <summary>
+/// TODO USE SOCKET INSTEAD OF MANUAL INSERTION :(
+/// </summary>
 void sync_new_worker() {
     EnterCriticalSection(&worker_mutex);
 
@@ -511,9 +521,9 @@ void initialize_workers(int n) {
 void distribute_task_to_worker(const char* task, SOCKET client_socket) {
     static int current_worker = 0;
 
-    printf("entering the distribution mutex\n");
+    //printf("entering the distribution mutex\n");
     EnterCriticalSection(&worker_mutex);
-    printf("ENTERED THE DISTRIBUTION MUTEX\n");
+    //printf("ENTERED THE DISTRIBUTION MUTEX\n");
 
     if (worker_count == 0) {
         printf("No workers available to handle the task.\n");
@@ -566,9 +576,9 @@ void distribute_task_to_worker(const char* task, SOCKET client_socket) {
             send(client_socket, response, strlen(response), 0);
         }
     }
-    printf("Leaving the distribution mutex\n");
+    //printf("Leaving the distribution mutex\n");
     LeaveCriticalSection(&worker_mutex);
-    printf("left the distribution mutex\n");
+    //printf("left the distribution mutex\n");
 }
 
 // Start the server to accept client connections
@@ -586,6 +596,7 @@ void start_server() {
 
     InitializeCriticalSection(&worker_mutex);
     InitializeCriticalSection(&task_queue_mutex);
+    InitializeCriticalSection(&terminal_mutex);
 
     // Start the worker reponse handler thread
     response_thread = CreateThread(NULL, 0, worker_response_handler, NULL, 0, NULL);
@@ -655,5 +666,6 @@ void start_server() {
     closesocket(server_socket);
     DeleteCriticalSection(&worker_mutex);
     DeleteCriticalSection(&task_queue_mutex);
+    DeleteCriticalSection(&terminal_mutex);
     WSACleanup();
 }

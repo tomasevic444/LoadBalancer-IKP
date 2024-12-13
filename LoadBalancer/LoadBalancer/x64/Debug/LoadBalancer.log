@@ -1,38 +1,38 @@
 ﻿  server.cpp
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(61,40): warning C4244: '=': conversion from 'SOCKET' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(159,12): warning C4477: 'printf' : format string '%d' requires an argument of type 'int', but variadic argument 2 has type 'SOCKET'
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(159,12):
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(63,40): warning C4244: '=': conversion from 'SOCKET' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(161,12): warning C4477: 'printf' : format string '%d' requires an argument of type 'int', but variadic argument 2 has type 'SOCKET'
+      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(161,12):
       consider using '%lld' in the format string
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(159,12):
+      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(161,12):
       consider using '%Id' in the format string
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(159,12):
+      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(161,12):
       consider using '%I64d' in the format string
   
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(177,12): warning C4477: 'printf' : format string '%d' requires an argument of type 'int', but variadic argument 2 has type 'SOCKET'
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(177,12):
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(179,12): warning C4477: 'printf' : format string '%d' requires an argument of type 'int', but variadic argument 2 has type 'SOCKET'
+      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(179,12):
       consider using '%lld' in the format string
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(177,12):
+      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(179,12):
       consider using '%Id' in the format string
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(177,12):
+      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(179,12):
       consider using '%I64d' in the format string
   
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(193,12): warning C4477: 'printf' : format string '%d' requires an argument of type 'int', but variadic argument 2 has type 'SOCKET'
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(193,12):
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(195,12): warning C4477: 'printf' : format string '%d' requires an argument of type 'int', but variadic argument 2 has type 'SOCKET'
+      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(195,12):
       consider using '%lld' in the format string
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(193,12):
+      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(195,12):
       consider using '%Id' in the format string
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(193,12):
+      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(195,12):
       consider using '%I64d' in the format string
   
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(208,38): warning C4477: 'sscanf_s' : format string '%s' requires an argument of type 'unsigned int', but variadic argument 2 has type 'unsigned __int64'
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(208,38):
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(210,38): warning C4477: 'sscanf_s' : format string '%s' requires an argument of type 'unsigned int', but variadic argument 2 has type 'unsigned __int64'
+      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(210,38):
       this argument is used as a buffer size
   
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(386,67): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(406,52): warning C4244: 'argument': conversion from 'SOCKET' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(521,45): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(544,86): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(548,53): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(555,48): warning C4267: '+=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(566,49): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(391,67): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(411,52): warning C4244: 'argument': conversion from 'SOCKET' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(526,45): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(549,86): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(553,53): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(560,48): warning C4267: '+=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(571,49): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
   LoadBalancer.vcxproj -> C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\x64\Debug\LoadBalancer.exe
