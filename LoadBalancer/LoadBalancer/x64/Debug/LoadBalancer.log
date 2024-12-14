@@ -1,13 +1,5 @@
 ﻿  server.cpp
 C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(63,40): warning C4244: '=': conversion from 'SOCKET' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(161,12): warning C4477: 'printf' : format string '%d' requires an argument of type 'int', but variadic argument 2 has type 'SOCKET'
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(161,12):
-      consider using '%lld' in the format string
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(161,12):
-      consider using '%Id' in the format string
-      C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(161,12):
-      consider using '%I64d' in the format string
-  
 C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(179,12): warning C4477: 'printf' : format string '%d' requires an argument of type 'int', but variadic argument 2 has type 'SOCKET'
       C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(179,12):
       consider using '%lld' in the format string
@@ -28,11 +20,12 @@ C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp
       C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(210,38):
       this argument is used as a buffer size
   
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(391,67): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(411,52): warning C4244: 'argument': conversion from 'SOCKET' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(526,45): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(549,86): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(553,53): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(560,48): warning C4267: '+=': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(571,49): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(393,67): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(413,52): warning C4244: 'argument': conversion from 'SOCKET' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(473,72): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(527,45): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(550,86): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(554,53): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(561,48): warning C4267: '+=': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\LoadBalancer\server.cpp(572,49): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
   LoadBalancer.vcxproj -> C:\Users\HP Laptop\Desktop\LoadBalancer-IKP\LoadBalancer\x64\Debug\LoadBalancer.exe

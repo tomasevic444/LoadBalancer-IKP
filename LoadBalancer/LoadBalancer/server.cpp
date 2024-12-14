@@ -90,12 +90,12 @@ DWORD WINAPI worker_response_handler(LPVOID args) {
                         u_long mode = 1; // Set non-blocking mode
                         ioctlsocket(worker->task_socket, FIONBIO, &mode);
 
-                        printf("FD IS SET, attempting to recv\n");
+                        //printf("FD IS SET, attempting to recv\n");
                         int bytes_received = recv(worker->task_socket, buffer, BUFFER_SIZE - 1, 0);
 
                         if (bytes_received > 0) {
                             buffer[bytes_received] = '\0';
-                            printf("Worker %d responded: %s\n", worker->worker_id, buffer);
+                             printf("Worker %d responded: %s\n", worker->worker_id, buffer);
 
                             // Start the sync procedure
                             sync_active = 1;
@@ -158,7 +158,7 @@ DWORD WINAPI worker_function(LPVOID args) {
         printf("Worker %d: Failed to create listening socket. Error: %d\n", worker->worker_id, WSAGetLastError());
         return 1;
     }
-    printf("Worker %d: Created listening socket (fd: %d)\n", worker->worker_id, listen_socket);
+    //printf("Worker %d: Created listening socket (fd: %d)\n", worker->worker_id, listen_socket);
 
     worker_address.sin_family = AF_INET;
     worker_address.sin_addr.s_addr = INADDR_ANY;
@@ -169,7 +169,7 @@ DWORD WINAPI worker_function(LPVOID args) {
         closesocket(listen_socket);
         return 1;
     }
-    printf("Worker %d: Bound to port (auto assigned)\n", worker->worker_id);
+    //printf("Worker %d: Bound to port (auto assigned)\n", worker->worker_id);
 
     if (listen(listen_socket, 1) == SOCKET_ERROR) {
         printf("Worker %d: Failed to listen on socket. Error: %d\n", worker->worker_id, WSAGetLastError());
@@ -379,9 +379,6 @@ int add_worker() {
 
 // Sync the new worker by fetching data from any synced worker and populating the hashmap
 
-/// <summary>
-/// TODO USE SOCKET INSTEAD OF MANUAL INSERTION :(
-/// </summary>
 void sync_new_worker() {
     EnterCriticalSection(&worker_mutex);
 
@@ -415,15 +412,8 @@ void sync_new_worker() {
     printf("Waiting for response from Worker %d...\n", existing_worker->worker_id);
     activity = select(existing_worker->task_socket + 1, &readfds, NULL, NULL, &timeout);
 
-    // Check result of select
-    if (activity < 0) {
-        printf("Select failed. Error: %d\n", WSAGetLastError());
-        LeaveCriticalSection(&worker_mutex);
-        return;
-    }
-
-    if (activity == 0) {
-        printf("Timeout waiting for data from Worker %d.\n", existing_worker->worker_id);
+    if (activity <= 0) {
+        printf("Timeout or error waiting for data from Worker %d.\n", existing_worker->worker_id);
         LeaveCriticalSection(&worker_mutex);
         return;
     }
@@ -439,55 +429,64 @@ void sync_new_worker() {
         }
 
         buffer[bytes_received] = '\0';  // Null-terminate the received data
-        printf("Received data from Worker %d: %s\n", existing_worker->worker_id, buffer);
+        printf("Received data from Worker %d.\n", existing_worker->worker_id);
 
         char* context = NULL;
         char* line = strtok_s(buffer, "\n", &context);
         while (line != NULL) {
-
             // Skip empty lines or lines with only whitespace
             if (strlen(line) == 0 || strspn(line, " \t") == strlen(line)) {
                 line = strtok_s(NULL, "\n", &context);
                 continue;
             }
+
+            // Parse key-value pair
             char key[BUFFER_SIZE] = { 0 };
             char value[BUFFER_SIZE] = { 0 };
 
-            // Find the colon in the line
             char* colon_pos = strchr(line, ':');
             if (colon_pos != NULL) {
-                // Calculate length of key and value (exclude the colon)
-                size_t key_len = colon_pos - line; // Length of key
-                size_t value_len = strlen(line) - key_len - 1; // Length of value
+                size_t key_len = colon_pos - line;
+                size_t value_len = strlen(line) - key_len - 1;
 
-                // Copy the key (ensure not to overflow)
                 strncpy_s(key, sizeof(key), line, key_len);
-
-                // Copy the value (ensure not to overflow)
                 strncpy_s(value, sizeof(value), colon_pos + 1, value_len);
 
-                // Trim leading/trailing spaces if necessary
-                // Trim the key
+                // Trim spaces from key and value
                 char* key_end = key + strlen(key) - 1;
                 while (key_end >= key && isspace(*key_end)) {
                     *key_end = '\0';
                     key_end--;
                 }
 
-                // Trim the value
                 char* value_end = value + strlen(value) - 1;
                 while (value_end >= value && isspace(*value_end)) {
                     *value_end = '\0';
                     value_end--;
                 }
 
-                // Insert the key-value pair into the new worker's hash map
-                if (insert(new_worker->data_store, key, _strdup(value)) == 0) {
-                    printf("New worker %d synchronized key-value pair: %s -> %s\n", new_worker->worker_id, key, value);
+                // Send STORE request to the new worker
+                char store_request[BUFFER_SIZE];
+                snprintf(store_request, sizeof(store_request), "STORE:%s:%s", key, value);
+
+                printf("Sending STORE request to Worker %d: %s\n", new_worker->worker_id, store_request);
+                if (send(new_worker->task_socket, store_request, strlen(store_request), 0) == SOCKET_ERROR) {
+                    printf("Failed to send STORE request to Worker %d. Error: %d\n", new_worker->worker_id, WSAGetLastError());
+                    LeaveCriticalSection(&worker_mutex);
+                    return;
                 }
-                else {
-                    printf("Failed to insert key-value pair for new worker %d: %s -> %s\n", new_worker->worker_id, key, value);
+
+                // Wait for acknowledgment
+                char ack_buffer[BUFFER_SIZE];
+                int ack_bytes_received = recv(new_worker->task_socket, ack_buffer, sizeof(ack_buffer), 0);
+                if (ack_bytes_received <= 0) {
+                    printf("Failed to receive acknowledgment from Worker %d. Error: %d\n", new_worker->worker_id, WSAGetLastError());
+                    LeaveCriticalSection(&worker_mutex);
+                    return;
                 }
+
+                ack_buffer[ack_bytes_received] = '\0';
+                printf("Received acknowledgment from Worker %d: %s\n", new_worker->worker_id, ack_buffer);
             }
             else {
                 printf("Failed to parse key-value pair from line: %s\n", line);
@@ -495,17 +494,14 @@ void sync_new_worker() {
 
             line = strtok_s(NULL, "\n", &context);
         }
-
-    }
-    else {
-        printf("No data received from Worker %d within the timeout period.\n", existing_worker->worker_id);
     }
 
     new_worker->synced = 1;
     printf("New worker %d is fully synchronized with existing data from Worker %d.\n", new_worker->worker_id, existing_worker->worker_id);
     LeaveCriticalSection(&worker_mutex);
-    printf("exited the critical section from sync\n");
+    printf("Exited the critical section from sync.\n");
 }
+
 
 // Initialize initial workers
 void initialize_workers(int n) {
