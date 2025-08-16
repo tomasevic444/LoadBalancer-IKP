@@ -2,7 +2,12 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #define WIN32_LEAN_AND_MEAN
 
+// DEFINE a recent Windows version (0x0600 = Windows Vista)
+#define _WIN32_WINNT 0x0600
+
 #include <winsock2.h>
+#include <ws2tcpip.h> 
+
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +19,11 @@
 Worker* workers = NULL;
 int worker_count = 0;
 int worker_capacity = 0;
+
+typedef struct {
+    SOCKET client_socket;
+    struct sockaddr_in client_address;
+} ClientHandlerArgs;
 
 // Critical section mutex-es for syncronizing tasks
 CRITICAL_SECTION worker_mutex;
@@ -577,13 +587,68 @@ void distribute_task_to_worker(const char* task, SOCKET client_socket) {
     //printf("left the distribution mutex\n");
 }
 
-// Start the server to accept client connections
+DWORD WINAPI handle_client(LPVOID args) {
+    // Cast the void pointer back to our struct and get the client socket
+    ClientHandlerArgs* handler_args = (ClientHandlerArgs*)args;
+    SOCKET client_socket = handler_args->client_socket;
+
+    // We can get the client's IP address for logging
+    char client_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &handler_args->client_address.sin_addr, client_ip, INET_ADDRSTRLEN);
+    int client_port = ntohs(handler_args->client_address.sin_port);
+
+    printf("Handling connection for client %s:%d\n", client_ip, client_port);
+
+    // The arguments struct is no longer needed, so we free it to prevent a memory leak.
+    free(handler_args);
+
+    char buffer[BUFFER_SIZE];
+    int bytes_received;
+
+    // Loop to receive data from this specific client
+    while ((bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0)) > 0) {
+        buffer[bytes_received] = '\0'; // Null-terminate the received string
+
+        // Check for the ADD_WORKER command
+        if (strcmp(buffer, ADD_WORKER_CMD) == 0) {
+            printf("Received 'ADD_WORKER' command from client %s:%d\n", client_ip, client_port);
+            int result = add_worker();
+            if (result != 0) {
+                send(client_socket, "ERROR: Max workers reached or failed to add.", 44, 0);
+            }
+            else {
+                printf("Syncing new worker with existing data...\n");
+                sync_new_worker(); // Note: This is still a blocking operation
+                send(client_socket, "SUCCESS: Worker added and synced.", 32, 0);
+            }
+        }
+        else {
+            // It's a regular task
+            printf("Received task from client %s:%d: %s\n", client_ip, client_port, buffer);
+            distribute_task_to_worker(buffer, client_socket);
+        }
+    }
+
+    // If recv returns 0, the client gracefully closed the connection.
+    // If it returns a negative number, an error occurred.
+    if (bytes_received == 0) {
+        printf("Client %s:%d disconnected gracefully.\n", client_ip, client_port);
+    }
+    else {
+        printf("Connection lost with client %s:%d. Error: %d\n", client_ip, client_port, WSAGetLastError());
+    }
+
+    // Clean up: close the socket for this client and exit the thread.
+    closesocket(client_socket);
+    return 0;
+}
+
+
 void start_server() {
     WSADATA wsa;
     SOCKET server_socket, client_socket;
     struct sockaddr_in server_address, client_address;
     int client_address_len = sizeof(client_address);
-    char buffer[BUFFER_SIZE];
 
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
         printf("Failed to initialize Winsock. Error: %d\n", WSAGetLastError());
@@ -599,7 +664,6 @@ void start_server() {
 
     // Initialize the worker pool
     initialize_workers(INITIAL_WORKER_COUNT);
-
 
     server_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (server_socket == INVALID_SOCKET) {
@@ -619,46 +683,50 @@ void start_server() {
         exit(EXIT_FAILURE);
     }
 
-    if (listen(server_socket, 5) == SOCKET_ERROR) {
+    if (listen(server_socket, SOMAXCONN) == SOCKET_ERROR) { 
         printf("Listen failed. Error: %d\n", WSAGetLastError());
         closesocket(server_socket);
         WSACleanup();
         exit(EXIT_FAILURE);
     }
 
-    printf("Server listening on port 5059...\n");
+    printf("Server listening on port 5059... Ready to accept multiple clients.\n");
+
 
     while (1) {
+        //  Accept a new connection. This call blocks until a client connects.
         client_socket = accept(server_socket, (struct sockaddr*)&client_address, &client_address_len);
         if (client_socket == INVALID_SOCKET) {
             printf("Failed to accept connection. Error: %d\n", WSAGetLastError());
+            continue; // Go back to waiting for another connection
+        }
+
+        //  Allocate memory for the thread arguments.
+        ClientHandlerArgs* args = (ClientHandlerArgs*)malloc(sizeof(ClientHandlerArgs));
+        if (args == NULL) {
+            printf("ERROR: Failed to allocate memory for client handler arguments.\n");
+            closesocket(client_socket); // Clean up the connection
             continue;
         }
-        while (1) {
-            int bytes_received = recv(client_socket, buffer, BUFFER_SIZE - 1, 0);
-            if (bytes_received > 0) {
-                buffer[bytes_received] = '\0';
-                if (strcmp(buffer, ADD_WORKER_CMD) == 0) {
-                    printf("Received add_worker command.\n");
-                    int result = add_worker();
-                    if (result) {
-                        send(client_socket, "Max workers reached.", 20, 0);
-                    }
-                    printf("syncing new worker with existing data\n");
-                    sync_new_worker();
+        args->client_socket = client_socket;
+        args->client_address = client_address;
 
-                    send(client_socket, "ADD_SUCCESS", 11, 0);
-                }
-                else {
-                    printf("Received task from client: %s\n", buffer);
-                    distribute_task_to_worker(buffer, client_socket); // Forward the task and pass the client socket
-                }
-            }
+        //  Create a new thread to handle this client.
+        HANDLE thread_handle = CreateThread(NULL, 0, handle_client, args, 0, NULL);
+        if (thread_handle == NULL) {
+            printf("ERROR: Failed to create thread for new client.\n");
+            free(args); // Clean up the allocated memory
+            closesocket(client_socket); // Clean up the connection
         }
-        
-        closesocket(client_socket);
+        else {
+            // We've successfully launched a thread to handle the client.
+            // We don't need to wait for it, so we can close the handle.
+            // The thread will continue to run in the background.
+            CloseHandle(thread_handle);
+        }
     }
 
+    // Cleanup (in a real server, you'd need a way to break the loop to reach this)
     closesocket(server_socket);
     DeleteCriticalSection(&worker_mutex);
     DeleteCriticalSection(&task_queue_mutex);
