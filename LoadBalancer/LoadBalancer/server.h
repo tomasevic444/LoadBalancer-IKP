@@ -22,6 +22,7 @@ typedef struct {
     int load;
     HashMap* data_store;
     int synced;
+    volatile LONG is_in_use; // Use LONG for Interlocked functions
 } Worker;
 
 // Function declarations
