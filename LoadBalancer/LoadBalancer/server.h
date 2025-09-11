@@ -12,17 +12,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include "hashmap.h"
-
+#define MAX_WORKER_COUNT 100 // Maximum number of workers
 // Worker structure
 typedef struct {
     int worker_id;
-    SOCKET task_socket; // For communication with the server
-    HANDLE thread_handle; // handle for running the worker function
-    int port;
+    SOCKET task_socket;      // Za komunikaciju sa LB-om
+    HANDLE thread_handle;
+    int port;                // Njegov sopstveni port za slušanje
     int load;
     HashMap* data_store;
-    int synced;
-    volatile LONG is_in_use; // Use LONG for Interlocked functions
+    volatile LONG is_in_use;
+
+    // NOVO: Lista portova ostalih radnika (peers)
+    int peer_ports[MAX_WORKER_COUNT];
+    int peer_count;
 } Worker;
 
 // Function declarations
